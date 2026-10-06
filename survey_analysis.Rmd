@@ -1,0 +1,714 @@
+---
+title: "Survey Analysis: Student Attitudes Towards AI-Generated Content"
+subtitle: "Exploring University Students' Trust, Attitudes and Behavioural Responses to AI-Generated Content"
+author: "Michelle Nyoni (3519339), MSc Artificial Intelligence, University of Stirling"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  pdf_document:
+    toc: true
+    number_sections: true
+    fig_caption: true
+    latex_engine: pdflatex
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: readable
+geometry: margin=2.5cm
+fontsize: 11pt
+urlcolor: blue
+---
+
+```{r setup, include = FALSE}
+# This chunk sets the defaults for the whole document. include = FALSE means
+# the chunk runs but neither the code nor its output appears in the report.
+#
+#   echo    = TRUE   show the code as well as the results
+#   warning = FALSE  hide warnings (see the note in section 6 about ties)
+#   message = FALSE  hide startup messages
+#   comment = ""     drop the "##" R normally puts before output
+#
+# options(width = 78) keeps wide output inside the PDF page margins.
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      comment = "", fig.align = "center",
+                      out.width = "100%")
+options(width = 78)
+```
+
+# How to use this file
+
+Open this file in RStudio. The data file `survey_clean_R.csv` must sit in the
+**same folder**. Before anything else choose
+**Session -> Set Working Directory -> To Source File Location**.
+
+Then either:
+
+* press **Knit** to produce the whole report as a PDF, or
+* run one chunk at a time using the small green arrow at its top right.
+
+## What you need installed
+
+| Needed for | Package | Install once with |
+|------------|---------|-------------------|
+| The analysis itself | none | nothing to install |
+| Knitting | `rmarkdown` | `install.packages("rmarkdown")` |
+| Knitting to **PDF** | LaTeX | see below |
+
+Every statistical function used below is built into R. Nothing about the
+results depends on an add-on package.
+
+PDF output needs a LaTeX installation. The easiest is TinyTeX, which is small
+and installs itself. Run these two lines **once** at the R console, then
+restart RStudio:
+
+```
+install.packages("tinytex")
+tinytex::install_tinytex()
+```
+
+The second line takes a few minutes. After that, **Knit** produces a PDF.
+
+If the PDF ever refuses to build and you need output quickly, use the small
+arrow beside the Knit button and choose **Knit to HTML** instead. Both outputs
+are configured at the top of this file and contain identical results.
+
+# Read the data
+
+`read.csv()` opens a comma-separated file and stores it as a *data frame*,
+which is R's word for a table of rows and columns.
+`stringsAsFactors = FALSE` tells R to leave text as plain text for now, so
+that we can decide ourselves which columns should become categories.
+
+```{r read-data}
+survey <- read.csv("survey_clean_R.csv", stringsAsFactors = FALSE)
+```
+
+If you get "cannot open file", the working directory is wrong. Run `getwd()`
+to see where R is looking.
+
+# Check the data before touching it
+
+Never clean data you have not looked at. Expect 48 rows and 48 columns.
+
+```{r check-size}
+dim(survey)
+nrow(survey)
+```
+
+```{r check-names}
+names(survey)
+```
+
+The table is too wide to print in full, so the first few rows of the first
+eight columns are enough to confirm it loaded correctly. The number before the
+comma inside the square brackets selects rows, the part after it selects
+columns.
+
+```{r check-head}
+head(survey[, 1:8])
+```
+
+# Clean the data
+
+## Remove accidental spaces around text answers
+
+Microsoft Forms exported some answers with a space on the end, so
+`"Arts and Humanities "` and `"Arts and Humanities"` look identical to a human
+but count as two different categories in R. `trimws()`, short for "trim white
+space", strips spaces from the start and end of every answer.
+
+This corrects an export fault. It does not change anyone's answer.
+
+```{r trim-whitespace}
+survey$age_range          <- trimws(survey$age_range)
+survey$study_level        <- trimws(survey$study_level)
+survey$subject_area       <- trimws(survey$subject_area)
+survey$student_status     <- trimws(survey$student_status)
+
+survey$attitude_useful_ai <- trimws(survey$attitude_useful_ai)
+survey$difficulty_detecting_ai <- trimws(survey$difficulty_detecting_ai)
+
+survey$confidence_responsible_use <-
+  trimws(survey$confidence_responsible_use)
+survey$confidence_judging_reliability <-
+  trimws(survey$confidence_judging_reliability)
+```
+
+## Harmonise the subject area categories
+
+Respondents typed their own subject area, so two pairs of answers mean the
+same thing but are written differently.
+
+**These are judgement calls, not facts.** Delete either line to undo it.
+
+* `"law"` is the same subject as `"Law"`, just typed in lower case.
+* `"Environmental Sciences"` is treated as part of Stirling's
+  `"Biological and Environmental Sciences"` division.
+
+```{r harmonise-subjects}
+survey$subject_area[survey$subject_area == "law"] <- "Law"
+
+survey$subject_area[survey$subject_area == "Environmental Sciences"] <-
+  "Biological and Environmental Sciences"
+```
+
+## Study level is left exactly as recorded
+
+Four respondents described themselves as "Graduate", "Recent graduate",
+"Self employed" and "Currently working post graduation" rather than choosing a
+study level. These are reported exactly as given.
+
+**Consequence:** study level has seven categories, four of which contain a
+single person. A group of one carries no statistical information, so study
+level is reported descriptively only and is never used as a grouping variable
+in a test. Section 8 repeats the main tests without these four people.
+
+## Turn the rating questions into ordered factors
+
+An *ordered factor* tells R that these answers have a running order:
+"Strongly disagree" sits below "Disagree", which sits below "Neutral", and so
+on. Without this, R would sort them alphabetically, which is meaningless here.
+
+The two scales use different wording, so they need separate level lists.
+
+```{r ordered-factors}
+agreement_levels <- c("Strongly disagree", "Disagree", "Neutral",
+                      "Agree", "Strongly agree")
+
+confidence_levels <- c("Extremely not confident",
+                       "Somewhat not confident",
+                       "Neutral",
+                       "Somewhat confident",
+                       "Extremely confident")
+
+survey$attitude_useful_ai <- factor(
+  survey$attitude_useful_ai,
+  levels = agreement_levels, ordered = TRUE)
+
+survey$confidence_responsible_use <- factor(
+  survey$confidence_responsible_use,
+  levels = confidence_levels, ordered = TRUE)
+
+survey$difficulty_detecting_ai <- factor(
+  survey$difficulty_detecting_ai,
+  levels = agreement_levels, ordered = TRUE)
+
+survey$confidence_judging_reliability <- factor(
+  survey$confidence_judging_reliability,
+  levels = agreement_levels, ordered = TRUE)
+```
+
+Every one of these must print `0`. Anything above 0 means an answer was
+spelled differently from the level lists above and has been turned into `NA`.
+
+```{r check-factors}
+sum(is.na(survey$attitude_useful_ai))
+sum(is.na(survey$confidence_responsible_use))
+sum(is.na(survey$difficulty_detecting_ai))
+sum(is.na(survey$confidence_judging_reliability))
+```
+
+## Make numeric copies of the rating questions
+
+The tests further down need numbers, not words. Because the factors above are
+ordered, `as.numeric()` converts each answer to its position on the scale:
+1 = Strongly disagree up to 5 = Strongly agree.
+
+**These numbers record rank order only.** We are not claiming the gap between
+"Agree" and "Strongly agree" is the same size as the gap between "Neutral" and
+"Agree". That is exactly why the tests further down are rank-based.
+
+```{r numeric-copies}
+survey$attitude_num    <- as.numeric(survey$attitude_useful_ai)
+survey$responsible_num <- as.numeric(survey$confidence_responsible_use)
+survey$detect_num      <- as.numeric(survey$difficulty_detecting_ai)
+survey$reliability_num <- as.numeric(survey$confidence_judging_reliability)
+```
+
+## Create the discipline grouping variable
+
+Computing students are compared against everyone else. `ifelse()` reads as
+"if the test is true give the first answer, otherwise give the second".
+Expect 17 Computing and 31 Other.
+
+```{r discipline}
+survey$discipline <- ifelse(
+  survey$subject_area == "Computing/ Engineering/ Technology",
+  "Computing", "Other")
+
+table(survey$discipline)
+```
+
+## Check the tick-box columns hold only 0 and 1
+
+`range()` prints the smallest and largest value found. Both should be 0 and 1.
+
+```{r check-binary}
+range(survey[, c("encountered_text", "encountered_images",
+                 "encountered_audio", "encountered_videos",
+                 "encountered_deepfakes", "encountered_social_media",
+                 "encountered_academic", "encountered_unsure")])
+
+range(survey[, c("use_writing", "use_coding", "use_study_support",
+                 "use_summarising", "use_brainstorming", "use_images",
+                 "use_presentations", "use_entertainment",
+                 "use_none", "use_other")])
+```
+
+# Descriptive statistics
+
+`table()` counts how many people gave each answer. `prop.table()` turns those
+counts into proportions; multiplying by 100 and rounding to one decimal place
+gives readable percentages. Read these lines from the inside out.
+
+## Who took part
+
+```{r demographics-age}
+table(survey$age_range)
+round(100 * prop.table(table(survey$age_range)), 1)
+```
+
+```{r demographics-level}
+table(survey$study_level)
+```
+
+```{r demographics-subject}
+table(survey$subject_area)
+round(100 * prop.table(table(survey$subject_area)), 1)
+```
+
+```{r demographics-status}
+table(survey$student_status)
+round(100 * prop.table(table(survey$student_status)), 1)
+
+table(survey$interview_willing)
+```
+
+## The four rating questions
+
+For each: the counts, the percentages, and the median. The **median** is the
+middle answer once everyone is lined up in order. It is the right summary for
+a rating scale; the mean is not, because it assumes the gaps between scale
+points are equal, which we cannot know.
+
+```{r rating-attitude}
+# "AI-generated content can be useful for students"
+table(survey$attitude_useful_ai)
+round(100 * prop.table(table(survey$attitude_useful_ai)), 1)
+median(survey$attitude_num)
+```
+
+```{r rating-responsible}
+# "How confident do you feel using AI-generated content responsibly?"
+table(survey$confidence_responsible_use)
+round(100 * prop.table(table(survey$confidence_responsible_use)), 1)
+median(survey$responsible_num)
+```
+
+```{r rating-detect}
+# "I find it difficult to tell whether some content has been generated by AI"
+table(survey$difficulty_detecting_ai)
+round(100 * prop.table(table(survey$difficulty_detecting_ai)), 1)
+median(survey$detect_num)
+```
+
+```{r rating-reliability}
+# "I feel confident judging whether AI-generated content is reliable"
+table(survey$confidence_judging_reliability)
+round(100 * prop.table(table(survey$confidence_judging_reliability)), 1)
+median(survey$reliability_num)
+```
+
+## The four multi-select questions
+
+Each answer option is its own 0/1 column, so one person can appear in several
+of them. `colSums()` adds up each column, which counts how many people ticked
+it. Percentages are out of all 48 respondents, so they add to more than 100.
+That is correct, not an error.
+
+```{r multiselect-encountered}
+encountered_columns <- c(
+  "encountered_text", "encountered_images", "encountered_audio",
+  "encountered_videos", "encountered_deepfakes",
+  "encountered_social_media", "encountered_academic",
+  "encountered_unsure")
+
+encountered_counts <- sort(colSums(survey[, encountered_columns]),
+                           decreasing = TRUE)
+encountered_counts
+round(100 * encountered_counts / nrow(survey), 1)
+```
+
+```{r multiselect-use}
+use_columns <- c(
+  "use_writing", "use_coding", "use_study_support", "use_summarising",
+  "use_brainstorming", "use_images", "use_presentations",
+  "use_entertainment", "use_none", "use_other")
+
+use_counts <- sort(colSums(survey[, use_columns]), decreasing = TRUE)
+use_counts
+round(100 * use_counts / nrow(survey), 1)
+```
+
+```{r multiselect-useful}
+useful_columns <- c(
+  "useful_brainstorming", "useful_summarising", "useful_concepts",
+  "useful_coding", "useful_drafting", "useful_revision",
+  "useful_not_academic", "useful_unsure")
+
+useful_counts <- sort(colSums(survey[, useful_columns]),
+                      decreasing = TRUE)
+useful_counts
+round(100 * useful_counts / nrow(survey), 1)
+```
+
+```{r multiselect-concerns}
+concern_columns <- c(
+  "concern_misconduct", "concern_overreliance",
+  "concern_critical_thinking", "concern_plagiarism",
+  "concern_inaccurate", "concern_guidance", "concern_privacy",
+  "concern_none")
+
+concern_counts <- sort(colSums(survey[, concern_columns]),
+                       decreasing = TRUE)
+concern_counts
+round(100 * concern_counts / nrow(survey), 1)
+```
+
+## The four count variables
+
+These record how many content types each person had met, how many purposes
+they used AI for, and so on. They are genuine counts, so the mean and standard
+deviation are appropriate here. `summary()` gives the minimum, lower quartile,
+median, mean, upper quartile and maximum.
+
+```{r count-variables}
+summary(survey$n_encountered); sd(survey$n_encountered)
+summary(survey$n_uses);        sd(survey$n_uses)
+summary(survey$n_useful);      sd(survey$n_useful)
+summary(survey$n_concerns);    sd(survey$n_concerns)
+```
+
+# Figures
+
+Three figures, numbered as they appear in the write-up. Each combines several
+panels to save space.
+
+`par(mfrow = c(rows, columns))` arranges the next few plots in a grid.
+`par(mar = ...)` sets the margins in the order bottom, left, top, right, which
+matters where the labels are long. `las = 2` turns the labels sideways.
+
+Short labels keep the panels readable.
+
+```{r short-labels}
+short_agreement <- c("Str. disagree", "Disagree", "Neutral",
+                     "Agree", "Str. agree")
+
+short_confidence <- c("Not at all", "Somewhat not", "Neutral",
+                      "Somewhat", "Extremely")
+```
+
+## Figure 1: the four rating questions
+
+```{r figure-1, fig.width = 9, fig.height = 7.5, fig.cap = "The four rating items (n = 48). Panel (b) uses a confidence scale."}
+par(mfrow = c(2, 2), mar = c(7, 4, 3, 1))
+
+barplot(table(survey$attitude_useful_ai),
+        names.arg = short_agreement,
+        main = "(a) AI content can be useful for students",
+        ylab = "Respondents", col = "grey70",
+        las = 2, ylim = c(0, 25))
+
+barplot(table(survey$confidence_responsible_use),
+        names.arg = short_confidence,
+        main = "(b) Confidence using AI responsibly",
+        ylab = "Respondents", col = "grey70",
+        las = 2, ylim = c(0, 25))
+
+barplot(table(survey$difficulty_detecting_ai),
+        names.arg = short_agreement,
+        main = "(c) Difficult to tell whether content is AI",
+        ylab = "Respondents", col = "grey70",
+        las = 2, ylim = c(0, 25))
+
+barplot(table(survey$confidence_judging_reliability),
+        names.arg = short_agreement,
+        main = "(d) Confident judging whether AI content is reliable",
+        ylab = "Respondents", col = "grey70",
+        las = 2, ylim = c(0, 25))
+
+par(mfrow = c(1, 1))
+```
+
+## Figure 2: purposes and concerns
+
+The raw column names are too ugly for a chart, so these lookup tables pair
+each column name with a readable label.
+
+Writing them as a **lookup** rather than a plain list matters.
+`concern_counts` is sorted by size and two concerns are tied on 18, so their
+order is not guaranteed. Indexing the lookup by `names(concern_counts)` makes
+each label follow its own bar wherever that bar ends up.
+
+```{r figure-2, fig.width = 10, fig.height = 5, fig.cap = "Purposes AI has been used for (a) and concerns in academic settings (b). Multi-select."}
+use_labels <- c(use_summarising   = "Summarising",
+                use_brainstorming = "Brainstorming",
+                use_writing       = "Writing",
+                use_study_support = "Study support",
+                use_images        = "Images",
+                use_coding        = "Coding",
+                use_entertainment = "Entertainment",
+                use_presentations = "Presentations",
+                use_none          = "Not used",
+                use_other         = "Other")
+
+concern_labels <- c(concern_critical_thinking = "Critical thinking",
+                    concern_overreliance      = "Over-reliance",
+                    concern_plagiarism        = "Plagiarism",
+                    concern_inaccurate        = "Inaccuracy",
+                    concern_misconduct        = "Misconduct",
+                    concern_guidance          = "Guidance",
+                    concern_privacy           = "Privacy",
+                    concern_none              = "None")
+
+par(mfrow = c(1, 2), mar = c(9, 4, 3, 1))
+
+barplot(use_counts,
+        names.arg = use_labels[names(use_counts)],
+        main = "(a) Purposes AI has been used for",
+        ylab = "Respondents", col = "grey70",
+        las = 2, ylim = c(0, 46))
+
+barplot(concern_counts,
+        names.arg = concern_labels[names(concern_counts)],
+        main = "(b) Concerns in academic settings",
+        ylab = "Respondents", col = "grey70",
+        las = 2, ylim = c(0, 46))
+
+par(mfrow = c(1, 1))
+```
+
+## Figure 3: breadth of use by attitude and by student status
+
+A boxplot shows the spread of a number across groups. The thick line is the
+median, the box holds the middle half of the group, and the whiskers reach
+most of the rest. Circles beyond the whiskers are unusually high or low
+individuals.
+
+The formula `n_uses ~ attitude_num` reads "n_uses as a function of
+attitude_num", the same notation used in the course manual.
+
+```{r figure-3, fig.width = 10, fig.height = 5, fig.cap = "Breadth of AI use by attitude towards usefulness (a) and by student status (b), n = 48."}
+par(mfrow = c(1, 2), mar = c(7, 4, 3, 1))
+
+boxplot(n_uses ~ attitude_num, data = survey,
+        main = "(a) By attitude towards usefulness",
+        xlab = "1 = Strongly disagree ... 5 = Strongly agree",
+        ylab = "Purposes used (0-8)", col = "grey80")
+
+boxplot(n_uses ~ student_status, data = survey,
+        main = "(b) By student status",
+        xlab = "", ylab = "Purposes used (0-8)",
+        col = "grey80", las = 2)
+
+par(mfrow = c(1, 1))
+```
+
+When the document is knitted, these figures are embedded in the PDF as vector
+graphics, so they stay sharp at any size and can be copied straight into the
+dissertation.
+
+# Statistical tests
+
+**Why these tests and not others.** The rating questions are *ordinal*. We
+know "Agree" ranks above "Neutral", but not that it is exactly one unit above.
+Tests such as the t-test and ANOVA do arithmetic on the raw scores, which
+assumes the scale points are evenly spaced. We cannot support that assumption,
+so **rank-based** tests are used instead. These line all 48 respondents up
+from lowest to highest, work with each person's *position* in that queue, and
+assume nothing about spacing.
+
+| Test | Question it answers | Relation to the manual |
+|------|---------------------|------------------------|
+| Spearman correlation | Do two ratings rise and fall together? | The rank version of the correlation in Chapter 9 |
+| Kruskal-Wallis | Do three or more groups differ? | The rank version of the ANOVA in Chapter 10 |
+| Fisher exact test | Are two yes/no variables linked? | Chapter 11. Chosen over chi-square, which needs about five or more expected people per cell; we have fewer |
+
+**Reading the output.** `rho` is correlation strength from -1 to +1; near 0
+means no link, and roughly 0.1 is weak, 0.3 moderate, 0.5 strong. The
+`p-value` is how easily the result could have arisen by chance alone; below
+0.05 is conventionally treated as worth reporting.
+
+**An expected warning.** R produces *"Cannot compute exact p-value with ties"*
+for the Spearman tests. Many people gave the same rating, so their ranks are
+tied and R falls back on a very good approximation. The warning is harmless
+and is hidden in the knitted report by the `warning = FALSE` setting at the
+top of this file.
+
+**Sample size caution.** 48 respondents, recruited by convenience rather than
+at random. Everything below is **exploratory**. It describes this sample and
+points to hypotheses worth testing properly; it does not establish anything
+about students in general.
+
+```{r test-1}
+# Does a positive attitude go with wider use?
+test1 <- cor.test(survey$attitude_num, survey$n_uses,
+                  method = "spearman")
+test1
+```
+
+```{r test-2}
+# Do students who find AI hard to detect feel less able to judge reliability?
+test2 <- cor.test(survey$detect_num, survey$reliability_num,
+                  method = "spearman")
+test2
+```
+
+```{r test-3}
+# Do the two confidence measures move together?
+test3 <- cor.test(survey$responsible_num, survey$reliability_num,
+                  method = "spearman")
+test3
+```
+
+```{r test-4}
+# Are more concerned students less positive about AI?
+test4 <- cor.test(survey$n_concerns, survey$attitude_num,
+                  method = "spearman")
+test4
+```
+
+```{r test-5}
+# Do students who use AI more widely have more concerns?
+test5 <- cor.test(survey$n_uses, survey$n_concerns,
+                  method = "spearman")
+test5
+```
+
+```{r test-6}
+# Does a positive attitude go with feeling able to use AI responsibly?
+test6 <- cor.test(survey$attitude_num, survey$responsible_num,
+                  method = "spearman")
+test6
+```
+
+```{r test-7}
+# Does breadth of use differ by student status?
+test7 <- kruskal.test(n_uses ~ student_status, data = survey)
+test7
+```
+
+The test does not say *which* group is higher, so look at the groups too.
+
+```{r test-7-groups}
+tapply(survey$n_uses, survey$student_status, median)
+tapply(survey$n_uses, survey$student_status, mean)
+table(survey$student_status)
+```
+
+```{r test-8}
+# Does breadth of use differ by discipline?
+test8 <- kruskal.test(n_uses ~ discipline, data = survey)
+test8
+tapply(survey$n_uses, survey$discipline, median)
+```
+
+```{r test-9}
+# Does the number of concerns differ by discipline?
+test9 <- kruskal.test(n_concerns ~ discipline, data = survey)
+test9
+tapply(survey$n_concerns, survey$discipline, median)
+```
+
+```{r test-10}
+# Do Computing students use AI for coding more than others?
+# table() with two arguments builds a cross-tabulation: rows are discipline,
+# columns are whether the person ticked coding (0 = no, 1 = yes).
+coding_table <- table(survey$discipline, survey$use_coding)
+coding_table
+
+test10 <- fisher.test(coding_table)
+test10
+```
+
+# Correcting for multiple tests
+
+Running ten tests at the 0.05 threshold means that even if nothing at all were
+going on, there would be roughly a 40 per cent chance of at least one
+"significant" result purely by luck. The Holm correction raises the bar to
+account for this.
+
+Results that stay below 0.05 afterwards are the ones to lead with. Results
+that stop being significant should be reported honestly as suggestive only.
+
+`$p.value` pulls the p-value out of a stored test result.
+
+```{r holm-correction}
+p_values <- c(test1$p.value, test2$p.value, test3$p.value,
+              test4$p.value, test5$p.value, test6$p.value,
+              test7$p.value, test8$p.value, test9$p.value,
+              test10$p.value)
+
+names(p_values) <- c("1 attitude-uses",
+                     "2 detect-reliability",
+                     "3 responsible-reliability",
+                     "4 concerns-attitude",
+                     "5 uses-concerns",
+                     "6 attitude-responsible",
+                     "7 uses-status",
+                     "8 uses-discipline",
+                     "9 concerns-discipline",
+                     "10 discipline-coding")
+
+round(p_values, 4)                              # before correction
+round(p.adjust(p_values, method = "holm"), 4)   # after correction
+```
+
+# Sensitivity check
+
+Four respondents are not currently students. This section repeats the main
+tests without them, to show whether their presence changed anything.
+
+`%in%` asks "is this value one of the following?" and `!` reverses it, so the
+line below reads "keep the rows whose study level is **not** one of these
+four". The comma before the closing bracket means "all columns". Expect 44.
+
+```{r sensitivity-subset}
+non_student_levels <- c("Currently working post graduation",
+                        "Self employed", "Graduate", "Recent graduate")
+
+students_only <- survey[!(survey$study_level %in% non_student_levels), ]
+
+nrow(students_only)
+```
+
+```{r sensitivity-tests}
+cor.test(students_only$attitude_num, students_only$n_uses,
+         method = "spearman")
+
+cor.test(students_only$detect_num, students_only$reliability_num,
+         method = "spearman")
+
+cor.test(students_only$responsible_num, students_only$reliability_num,
+         method = "spearman")
+
+cor.test(students_only$n_concerns, students_only$attitude_num,
+         method = "spearman")
+
+kruskal.test(n_uses ~ student_status, data = students_only)
+
+fisher.test(table(students_only$discipline, students_only$use_coding))
+```
+
+Compare each of these against the matching test in section 6. If the direction
+and rough size of each result are unchanged, the findings do not depend on
+those four respondents, and that can be stated in the dissertation.
+
+# Session information
+
+Recording the R version makes the analysis reproducible by someone else later.
+
+```{r session-info}
+sessionInfo()
+```
