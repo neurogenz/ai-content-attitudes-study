@@ -20,7 +20,7 @@ A mixed-methods study of how university students use and judge AI-generated cont
 
 ## How to run the analysis
 
-Open the .Rmd file in analysis/ in RStudio and knit it. [List the R packages it needs.]
+Open the .Rmd file in analysis/ in RStudio and knit it. No packages needed for analysis. Install rmarkdown package and LaTex to knit to PDF. 
 
 ## Data
 
