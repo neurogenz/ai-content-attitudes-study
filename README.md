@@ -16,7 +16,7 @@ A mixed-methods study of how university students use and judge AI-generated cont
 ## Contents
 
 - analysis/ holds the R Markdown analysis
-- The website files sit at the top level of the repository ([(https://neurogenz.github.io/ai-content-attitudes-study/)]([https://github.com/neurogenz/ai-content-attitudes-study/settings/pages])
+- The website files sit at the top level of the repository [(https://neurogenz.github.io/ai-content-attitudes-study/)]([https://github.com/neurogenz/ai-content-attitudes-study/settings/pages])
 
 ## How to run the analysis
 
